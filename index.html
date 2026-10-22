@@ -24,8 +24,8 @@
   .fields{display:grid;grid-template-columns:minmax(230px,1fr) minmax(200px,.72fr) minmax(140px,.45fr) auto;align-items:end;gap:11px}
   .field{min-width:0;display:grid;gap:6px}
   .field-label{color:#758197;font-size:11px;font-weight:750;letter-spacing:.03em}
-  input[type=text],input[type=date],select{width:100%;height:44px;border:1px solid #dce2eb;background:#fff;border-radius:10px;padding:0 12px;color:var(--ink);min-width:0}
-  input[type=text]::placeholder{color:#a5adbb}
+  input[type=text],input[type=search],input[type=date],select{width:100%;height:44px;border:1px solid #dce2eb;background:#fff;border-radius:10px;padding:0 12px;color:var(--ink);min-width:0}
+  input[type=text]::placeholder,input[type=search]::placeholder{color:#a5adbb}
   select{padding-right:28px}
   .primary{height:44px;background:var(--accent);border:0;border-radius:10px;color:#fff;padding:0 19px;font-weight:750;white-space:nowrap;box-shadow:0 4px 8px rgba(69,94,212,.12)}
   .primary:hover{background:#344bbe}
@@ -38,6 +38,8 @@
   .progress>div{background:var(--accent);height:100%;width:0%;border-radius:10px;transition:width .2s}
   .board-toolbar{display:flex;justify-content:space-between;align-items:center;gap:14px;margin:0 2px 15px}
   .toolbar-left{display:flex;align-items:center;gap:17px;flex-wrap:wrap}
+  .toolbar-left .task-search{width:220px;max-width:100%;height:38px;font-size:13px}
+  .search-empty{color:var(--muted);text-align:center;margin:0 0 15px;font-size:14px}
   .section-title{font-size:18px;letter-spacing:-.035em;font-weight:790;margin:0}
   .filters{display:flex;gap:3px;padding:3px;border:1px solid var(--line);border-radius:10px;background:#fff}
   .filter{padding:6px 11px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-weight:680;font-size:12px}
@@ -140,10 +142,12 @@
         <button type="button" class="filter" data-filter="active" aria-pressed="false">Активные</button>
         <button type="button" class="filter" data-filter="done" aria-pressed="false">Готово</button>
       </div>
+      <input type="search" id="task-search" class="task-search" placeholder="Поиск по названию" aria-label="Поиск задач по названию" autocomplete="off" aria-controls="task-matrix">
     </div>
     <button type="button" id="clear-done" class="clear">Удалить выполненные</button>
   </div>
-  <div class="matrix" aria-label="Четыре блока приоритетов">
+  <p class="search-empty" id="search-empty" role="status" hidden>Задачи не найдены</p>
+  <div class="matrix" id="task-matrix" aria-label="Четыре блока приоритетов">
     <section class="quadrant" data-priority="q1" aria-labelledby="q1-title">
       <div class="qhead"><span class="qnum">01</span><div><h3 class="qtitle" id="q1-title">Важно / срочно</h3><p class="qdesc">Сделать в первую очередь</p></div><span class="qcount" id="q1-count">0</span></div>
       <ul class="task-list" id="q1-list"></ul><div class="qempty" id="q1-empty">Задач пока нет</div>
@@ -281,8 +285,11 @@
     $('progress').setAttribute('aria-valuenow',percentage);
     $('clear-done').disabled=completed===0;
     document.querySelectorAll('[data-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter===filter)));
+    const query=$('task-search').value.trim().toLowerCase();
+    const matching=tasks.filter(t=>(filter==='all'||(filter==='done'?t.done:!t.done))&&t.text.toLowerCase().includes(query));
+    $('search-empty').hidden=!query||matching.length>0;
     QUADRANTS.forEach(q=>{
-      const visible=tasks.filter(t=>t.priority===q&&(filter==='all'||(filter==='done'?t.done:!t.done)));
+      const visible=matching.filter(t=>t.priority===q);
       visible.sort((a,b)=>Number(a.done)-Number(b.done) ||
         ((a.deadline||'9999-12-31').localeCompare(b.deadline||'9999-12-31')) || (b.created-a.created));
       $(''+q+'-count').textContent=visible.length;
@@ -302,6 +309,7 @@
     save();render();$('task-input').focus();
   });
   document.querySelectorAll('[data-filter]').forEach(button=>button.addEventListener('click',()=>{filter=button.dataset.filter;editingId=null;render();}));
+  $('task-search').addEventListener('input',()=>{render();});
   $('clear-done').addEventListener('click',()=>{tasks=tasks.filter(t=>!t.done);editingId=null;save();render();});
   $('date').textContent=new Intl.DateTimeFormat('ru-RU',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date());
   render();
