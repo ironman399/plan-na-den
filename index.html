@@ -48,13 +48,21 @@
   .clear{border:0;background:transparent;color:var(--muted);font-size:12px;padding:8px 0}
   .clear:hover{color:#b84949}
   .clear:disabled{opacity:.5;cursor:default}
-  .matrix{display:flex;flex-direction:column;gap:24px}
-  .quadrant{min-width:0}
-  .qhead{display:flex;gap:13px;align-items:flex-start;padding:0 0 12px;border-bottom:1px solid var(--line)}
-  .qnum{width:33px;height:33px;flex:none;display:grid;place-items:center;border-radius:10px;color:var(--q-color);background:var(--q-chip);font-weight:820;font-size:14px}
-  .qtitle{font-size:16px;line-height:1.25;font-weight:800;letter-spacing:-.02em;margin:0}
-  .qdesc{font-size:12px;color:#738096;margin:4px 0 0}
-  .qcount{margin-left:auto;min-width:29px;text-align:center;border-radius:9px;background:transparent;color:var(--q-color);font-size:13px;font-weight:800;padding:4px 8px;border:1px solid var(--line)}
+  .matrix{display:flex;flex-direction:column;gap:0}
+  .quadrant{min-width:0;display:grid;grid-template-columns:140px minmax(0,1fr);column-gap:12px}
+  .quadrant[hidden]{display:none}
+  .qhead{grid-column:1;grid-row:1;display:flex;align-items:center;padding:6px 10px;background:var(--q-chip);color:var(--q-color);border-radius:4px;border-left:4px solid var(--q-color)}
+  .qhead>div{min-width:0}
+  .qnum,.qdesc,.qcount{display:none}
+  .qtitle{font-size:13px;line-height:1.25;font-weight:800;margin:0;overflow-wrap:anywhere}
+  .quadrant>.task-list{grid-column:2;grid-row:1}
+  .quadrant.is-empty{grid-template-columns:32px minmax(0,1fr)}
+  .is-empty .qhead{width:32px;height:32px;padding:0;border:0;background:var(--q-color)}
+  .is-empty .qtitle{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .matrix.is-searching .quadrant{display:block}
+  .matrix.is-searching .quadrant[hidden]{display:none}
+  .is-searching .qhead{display:none}
+  .is-searching .task-main::before{content:"";width:18px;height:18px;margin-top:2px;flex:none;background:var(--q-color);border-radius:3px}
   .quadrant[data-priority=q1]{--q-color:#bb4c4d;--q-chip:#ffebeb}
   .quadrant[data-priority=q2]{--q-color:#4674ba;--q-chip:#e8f0ff}
   .quadrant[data-priority=q3]{--q-color:#b17b2c;--q-chip:#fff1d9}
@@ -76,7 +84,7 @@
   .icon-button:hover{background:#edf1fb;color:var(--accent)}
   .icon-button.remove:hover{background:#fff0f0;color:#b73737}
   .icon-button svg{width:16px;height:16px;stroke-width:1.8}
-  .qempty{padding:12px 0;color:#a0a9b8;font-size:13px;margin:0}
+  .qempty{display:none}
   .edit-form{margin:13px 0 1px 29px;padding:13px;border-radius:11px;background:#f8f9fd;display:grid;gap:8px}
   .edit-grid{display:grid;grid-template-columns:1fr minmax(125px,.65fr);gap:8px}
   .edit-form label{display:block;color:#7d8799;font-size:11px;font-weight:650;margin-bottom:4px}
@@ -89,7 +97,7 @@
   .warning.show{display:block}
   @media(max-width:1060px){.composer{display:block}.overview{margin-top:20px;border-left:0;border-top:1px solid var(--line);padding:16px 0 0}.fields{grid-template-columns:minmax(180px,1fr) minmax(170px,.8fr) minmax(145px,.6fr) auto}}
   @media(max-width:780px){.fields{grid-template-columns:repeat(2,minmax(0,1fr))}.fields>.field:first-child{grid-column:1/-1}.fields>.primary{width:100%}.top{align-items:start}.date-label{display:none}}
-  @media(max-width:480px){body{padding:23px 12px 40px}.composer{padding:18px}.fields{grid-template-columns:1fr}.fields>.field:first-child{grid-column:auto}.board-toolbar{align-items:start;flex-direction:column;gap:10px}.toolbar-left{gap:10px}.clear{align-self:flex-end}.qtitle{font-size:15px}.edit-grid{grid-template-columns:1fr}}
+  @media(max-width:480px){body{padding:23px 12px 40px}.composer{padding:18px}.fields{grid-template-columns:1fr}.fields>.field:first-child{grid-column:auto}.board-toolbar{align-items:start;flex-direction:column;gap:10px}.toolbar-left{gap:10px}.clear{align-self:flex-end}.quadrant{grid-template-columns:110px minmax(0,1fr);column-gap:8px}.qhead{padding:6px}.qtitle{font-size:12px}.edit-grid{grid-template-columns:1fr}}
   @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -290,10 +298,15 @@
     const query=$('task-search').value.trim().toLowerCase();
     const matching=tasks.filter(t=>(filter==='all'||(filter==='done'?t.done:!t.done))&&t.text.toLowerCase().includes(query));
     $('search-empty').hidden=!query||matching.length>0;
+    $('task-matrix').classList.toggle('is-searching',Boolean(query));
     QUADRANTS.forEach(q=>{
       const visible=matching.filter(t=>t.priority===q);
       visible.sort((a,b)=>Number(a.done)-Number(b.done) ||
         ((a.deadline||'9999-12-31').localeCompare(b.deadline||'9999-12-31')) || (b.created-a.created));
+      const section=$(q+'-list').closest('.quadrant');
+      section.hidden=Boolean(query)&&visible.length===0;
+      section.classList.toggle('is-empty',visible.length===0);
+      section.querySelector('.qhead').title=$(q+'-title').textContent;
       $(''+q+'-count').textContent=visible.length;
       $(''+q+'-list').replaceChildren(...visible.map(makeTask));
       $(q+'-empty').hidden=visible.length>0;
