@@ -29,8 +29,10 @@
   .fields>.primary{grid-column:2;grid-row:2}
   .fields::after{content:"+ Добавить";visibility:hidden;pointer-events:none;grid-column:4;grid-row:1;padding:0 19px;font-weight:750;white-space:nowrap}
   .field{min-width:0;display:grid;gap:6px}
+  .deadline-fields{display:grid;grid-template-columns:minmax(0,1fr) 94px;gap:6px}
+  .deadline-fields input{padding:0 6px}
   .field-label{color:#758197;font-size:11px;font-weight:750;letter-spacing:.03em}
-  input[type=text],input[type=search],input[type=date],select{width:100%;height:44px;border:1px solid #dce2eb;background:#fff;border-radius:10px;padding:0 12px;color:var(--ink);min-width:0}
+  input[type=text],input[type=search],input[type=date],input[type=time],select{width:100%;height:44px;border:1px solid #dce2eb;background:#fff;border-radius:10px;padding:0 12px;color:var(--ink);min-width:0}
   input[type=text]::placeholder,input[type=search]::placeholder{color:#a5adbb}
   select{padding-right:28px}
   .primary{height:44px;background:var(--accent);border:0;border-radius:10px;color:#fff;padding:0 19px;font-weight:750;white-space:nowrap;box-shadow:0 4px 8px rgba(69,94,212,.12)}
@@ -137,7 +139,7 @@
         </div>
         <div class="field">
           <label class="field-label" for="task-deadline">ДЕДЛАЙН</label>
-          <input type="date" id="task-deadline" aria-label="Срок исполнения, необязательно">
+          <div class="deadline-fields"><input type="date" id="task-deadline" aria-label="Дата срока исполнения, необязательно"><input type="time" id="task-time" aria-label="Время срока исполнения, необязательно" disabled></div>
         </div>
         <button class="primary" type="submit">+ Добавить</button>
       </form>
@@ -202,6 +204,7 @@
           id:x.id, text:x.text, done:x.done,
           priority:QUADRANTS.includes(x.priority) ? x.priority : 'q4',
           deadline:validDate(x.deadline) ? x.deadline : '',
+          deadlineTime:validDate(x.deadline)&&validTime(x.deadlineTime) ? x.deadlineTime : '',
           created:Number.isFinite(x.created) ? x.created : 0
         }));
     }
@@ -215,17 +218,22 @@
     const parsed=new Date(y,m-1,d);
     return parsed.getFullYear()===y && parsed.getMonth()===m-1 && parsed.getDate()===d;
   }
+  function validTime(value){return typeof value==='string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);}
+  function deadlineSort(task){return task.deadline ? task.deadline+'T'+(task.deadlineTime||'23:59') : '9999-12-31T23:59';}
+  function humanDeadline(value,time){return humanDate(value)+(time?' · '+time:'');}
   function isoLocal(date){
     return [date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
   }
-  function deadlineLabel(value){
+  function deadlineLabel(value,time){
     if (!value) return null;
     const today=isoLocal(new Date());
     const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);
-    if (value<today) return {text:'Просрочено · '+humanDate(value),state:'overdue'};
-    if (value===today) return {text:'Сегодня',state:'today'};
-    if (value===isoLocal(tomorrow))return{text:'Завтра',state:''};
-    return {text:'До '+humanDate(value),state:''};
+    const suffix=time?' · '+time:'';
+    const overdue=time ? new Date(value+'T'+time).getTime()<=Date.now() : value<today;
+    if (overdue) return {text:'Просрочено · '+humanDeadline(value,time),state:'overdue'};
+    if (value===today) return {text:'Сегодня'+suffix,state:'today'};
+    if (value===isoLocal(tomorrow))return{text:'Завтра'+suffix,state:''};
+    return {text:'До '+humanDeadline(value,time),state:''};
   }
   function humanDate(value){
     const [year,month,day]=value.split('-').map(Number);
@@ -254,6 +262,12 @@
     const textField=makeField('ЗАДАЧА','text','text',task.text);
     const grid=document.createElement('div');grid.className='edit-grid';
     grid.append(makeField('КАТЕГОРИЯ','priority','select',task.priority),makeField('ДЕДЛАЙН','deadline','date',task.deadline));
+    const timeField=makeField('ВРЕМЯ','deadlineTime','time',task.deadlineTime||'');
+    grid.append(timeField);
+    const dateInput=grid.querySelector('input[name="deadline"]');
+    const timeInput=timeField.querySelector('input');
+    timeInput.disabled=!task.deadline;
+    dateInput.addEventListener('input',()=>{timeInput.disabled=!dateInput.value;if(!dateInput.value)timeInput.value='';});
     const actions=document.createElement('div');actions.className='edit-actions';
     const cancel=document.createElement('button');cancel.type='button';cancel.className='cancel-edit';cancel.textContent='Отмена';
     cancel.addEventListener('click',()=>{editingId=null;render();});
@@ -262,8 +276,9 @@
     form.addEventListener('submit',event=>{
       event.preventDefault();const data=new FormData(form);const text=String(data.get('text')||'').trim();
       const priority=String(data.get('priority')||'');const deadline=String(data.get('deadline')||'');
-      if(!text || !QUADRANTS.includes(priority) || (deadline && !validDate(deadline)))return;
-      task.text=text;task.priority=priority;task.deadline=deadline;
+      const deadlineTime=String(data.get('deadlineTime')||'');
+      if(!text || !QUADRANTS.includes(priority) || (deadline && !validDate(deadline)) || (deadlineTime && (!deadline || !validTime(deadlineTime))))return;
+      task.text=text;task.priority=priority;task.deadline=deadline;task.deadlineTime=deadlineTime;
       editingId=null;save();render();
     });
     return form;
@@ -276,9 +291,9 @@
     check.addEventListener('change',()=>{task.done=check.checked;save();render();});
     const content=document.createElement('div');content.className='task-content';
     const name=document.createElement('span');name.className='task-text';name.textContent=task.text;content.append(name);
-    const due=deadlineLabel(task.deadline);
+    const due=deadlineLabel(task.deadline,task.deadlineTime);
     if(due){const d=document.createElement('span');d.className='deadline'+(!task.done&&due.state?' '+due.state:'');
-      d.textContent=task.done?(task.deadline?'Срок: '+humanDate(task.deadline):''):due.text;content.append(d);}
+      d.textContent=task.done?(task.deadline?'Срок: '+humanDeadline(task.deadline,task.deadlineTime):''):due.text;content.append(d);}
     const buttons=document.createElement('div');buttons.className='actions';
     const edit=document.createElement('button');edit.type='button';edit.className='icon-button';
     edit.title='Изменить задачу';edit.setAttribute('aria-label','Изменить задачу: '+task.text);
@@ -308,7 +323,7 @@
     QUADRANTS.forEach(q=>{
       const visible=matching.filter(t=>t.priority===q);
       visible.sort((a,b)=>Number(a.done)-Number(b.done) ||
-        ((a.deadline||'9999-12-31').localeCompare(b.deadline||'9999-12-31')) || (b.created-a.created));
+        deadlineSort(a).localeCompare(deadlineSort(b)) || (b.created-a.created));
       const section=$(q+'-list').closest('.quadrant');
       section.hidden=Boolean(query)&&visible.length===0;
       section.classList.toggle('is-empty',visible.length===0);
@@ -320,13 +335,14 @@
       $(q+'-empty').textContent=filter==='done'?'Нет выполненных задач':filter==='active'?'Нет активных задач':'Задач пока нет';
     });
   }
+  $('task-deadline').addEventListener('input',()=>{$('task-time').disabled=!$('task-deadline').value;if(!$('task-deadline').value)$('task-time').value='';});
   $('task-form').addEventListener('submit',event=>{
     event.preventDefault();
-    const text=$('task-input').value.trim(),priority=$('task-priority').value,deadline=$('task-deadline').value;
-    if(!text||!QUADRANTS.includes(priority)||(deadline&&!validDate(deadline)))return;
+    const text=$('task-input').value.trim(),priority=$('task-priority').value,deadline=$('task-deadline').value,deadlineTime=$('task-time').value;
+    if(!text||!QUADRANTS.includes(priority)||(deadline&&!validDate(deadline))||(deadlineTime&&(!deadline||!validTime(deadlineTime))))return;
     const id=typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2);
-    tasks.push({id,text,priority,deadline,done:false,created:Date.now()});
-    filter='all';$('task-input').value='';$('task-priority').value='';$('task-deadline').value='';
+    tasks.push({id,text,priority,deadline,deadlineTime,done:false,created:Date.now()});
+    filter='all';$('task-input').value='';$('task-priority').value='';$('task-deadline').value='';$('task-time').value='';$('task-time').disabled=true;
     save();render();$('task-input').focus();
   });
   document.querySelectorAll('[data-filter]').forEach(button=>button.addEventListener('click',()=>{filter=button.dataset.filter;editingId=null;render();}));
